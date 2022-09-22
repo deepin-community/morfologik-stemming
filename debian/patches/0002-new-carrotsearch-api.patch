@@ -1,0 +1,453 @@
+From: Andrej Shadura <andrewsh@debian.org>
+Date: Tue, 26 Feb 2019 13:59:36 +0100
+Subject: Update to the new CarrotSearch API: IntIntOpenHashMap → IntIntHashMap
+
+Based on a patch by Dawid Weiss <dawid.weiss@carrotsearch.com>.
+
+See for more details:
+
+* https://github.com/carrotsearch/hppc/commit/3fe735b781b6b3f7cf87b205a1dea186b96c8c2e
+* https://github.com/carrotsearch/hppc/commit/69d985bd4d9ca8273dd8d22d2baa65ae25056d48
+* https://github.com/morfologik/morfologik-stemming/commit/8a9f49fe1a9000e4d1efd3d89d9d3997eb4f073e
+
+--- a/morfologik-fsa/src/main/java/morfologik/fsa/CFSA2Serializer.java
++++ b/morfologik-fsa/src/main/java/morfologik/fsa/CFSA2Serializer.java
+@@ -23,7 +23,7 @@
+ import com.carrotsearch.hppc.BitSet;
+ import com.carrotsearch.hppc.BoundedProportionalArraySizingStrategy;
+ import com.carrotsearch.hppc.IntArrayList;
+-import com.carrotsearch.hppc.IntIntOpenHashMap;
++import com.carrotsearch.hppc.IntIntHashMap;
+ import com.carrotsearch.hppc.IntStack;
+ import com.carrotsearch.hppc.cursors.IntCursor;
+ import com.carrotsearch.hppc.cursors.IntIntCursor;
+@@ -60,12 +60,12 @@
+     /**
+      * A hash map of [state, offset] pairs.
+      */
+-    private IntIntOpenHashMap offsets = new IntIntOpenHashMap();
++    private IntIntHashMap offsets = new IntIntHashMap();
+ 
+     /**
+      * A hash map of [state, right-language-count] pairs.
+      */
+-    private IntIntOpenHashMap numbers = new IntIntOpenHashMap();
++    private IntIntHashMap numbers = new IntIntHashMap();
+ 
+     /**
+      * Scratch array for serializing vints.
+@@ -216,7 +216,7 @@
+          * Compute the states with most inlinks. These should be placed as close to the 
+          * start of the automaton, as possible so that v-coded addresses are tiny.  
+          */
+-        final IntIntOpenHashMap inlinkCount = computeInlinkCount(fsa);
++        final IntIntHashMap inlinkCount = computeInlinkCount(fsa);
+ 
+         /*
+          * An array of ordered states for serialization.
+@@ -282,7 +282,7 @@
+      * calculating stable state offsets.
+      */
+     private int linearizeAndCalculateOffsets(FSA fsa, IntArrayList states,
+-            IntArrayList linearized, IntIntOpenHashMap offsets) throws IOException
++            IntArrayList linearized, IntIntHashMap offsets) throws IOException
+     {
+         final BitSet visited = new BitSet();
+         final IntStack nodes = new IntStack();
+@@ -346,7 +346,7 @@
+      * Compute the set of states that should be linearized first to minimize other
+      * states goto length.
+      */
+-    private ArrayDeque<Integer> computeFirstStates(IntIntOpenHashMap inlinkCount, 
++    private ArrayDeque<Integer> computeFirstStates(IntIntHashMap inlinkCount, 
+             int maxStates,
+             int minInlinkCount) 
+     {
+@@ -382,8 +382,8 @@
+     /**
+      * Compute in-link count for each state.
+      */
+-    private IntIntOpenHashMap computeInlinkCount(final FSA fsa) {
+-        IntIntOpenHashMap inlinkCount = new IntIntOpenHashMap();
++    private IntIntHashMap computeInlinkCount(final FSA fsa) {
++        IntIntHashMap inlinkCount = new IntIntHashMap();
+         BitSet visited = new BitSet();
+         IntStack nodes = new IntStack();
+         nodes.push(fsa.getRootNode());
+--- a/morfologik-fsa/src/main/java/morfologik/fsa/FSA5Serializer.java
++++ b/morfologik-fsa/src/main/java/morfologik/fsa/FSA5Serializer.java
+@@ -64,12 +64,12 @@
+     /**
+      * A hash map of [state, offset] pairs.
+      */
+-    private IntIntOpenHashMap offsets = new IntIntOpenHashMap();
++    private IntIntHashMap offsets = new IntIntHashMap();
+ 
+     /**
+      * A hash map of [state, right-language-count] pairs.
+      */
+-    private IntIntOpenHashMap numbers = new IntIntOpenHashMap();
++    private IntIntHashMap numbers = new IntIntHashMap();
+ 
+     /**
+      * Serialize the automaton with the number of right-language sequences in
+--- a/morfologik-fsa/src/main/java/morfologik/fsa/FSAInfo.java
++++ b/morfologik-fsa/src/main/java/morfologik/fsa/FSAInfo.java
+@@ -2,155 +2,149 @@
+ 
+ import java.util.BitSet;
+ 
+-import com.carrotsearch.hppc.IntIntOpenHashMap;
++import com.carrotsearch.hppc.IntIntHashMap;
+ 
+ /**
+  * Compute additional information about an FSA: number of arcs, nodes, etc.
+  */
+ public final class FSAInfo {
+-	/**
+-	 * Computes the exact number of states and nodes by recursively traversing
+-	 * the FSA.
+-	 */
+-	private static class NodeVisitor {
+-		final BitSet visitedArcs = new BitSet();
+-		final BitSet visitedNodes = new BitSet();
+-
+-		int nodes;
+-		int arcs;
+-		int totalArcs;
+-
+-		private final FSA fsa;
+-
+-		NodeVisitor(FSA fsa) {
+-			this.fsa = fsa;
+-		}
+-
+-		public void visitNode(final int node) {
+-			if (visitedNodes.get(node)) {
+-				return;
+-			}
+-			visitedNodes.set(node);
+-
+-			nodes++;
+-			for (int arc = fsa.getFirstArc(node); arc != 0; arc = fsa
+-			        .getNextArc(arc)) {
+-				if (!visitedArcs.get(arc)) {
+-					arcs++;
+-				}
+-				totalArcs++;
+-				visitedArcs.set(arc);
+-
+-				if (!fsa.isArcTerminal(arc)) {
+-					visitNode(fsa.getEndNode(arc));
+-				}
+-			}
+-		}
+-	}
+-
+-	/**
+-	 * Computes the exact number of final states.
+-	 */
+-	private static class FinalStateVisitor {
+-		final IntIntOpenHashMap visitedNodes = new IntIntOpenHashMap();
+-
+-		private final FSA fsa;
+-
+-		FinalStateVisitor(FSA fsa) {
+-			this.fsa = fsa;
+-		}
+-
+-		public int visitNode(int node) {
+-			if (visitedNodes.containsKey(node))
+-				return visitedNodes.lget();
+-
+-			int fromHere = 0;
+-			for (int arc = fsa.getFirstArc(node); 
+-				arc != 0; arc = fsa.getNextArc(arc))
+-			{
+-				if (fsa.isArcFinal(arc))
+-					fromHere++;
+-
+-				if (!fsa.isArcTerminal(arc)) {
+-					fromHere += visitNode(fsa.getEndNode(arc));
+-				}
+-			}
+-			visitedNodes.put(node, fromHere);
+-			return fromHere;
+-		}
+-	}
+-
+-	/**
+-	 * Number of nodes in the automaton.
+-	 */
+-	public final int nodeCount;
+-
+-	/**
+-	 * Number of arcs in the automaton, excluding an arcs from the zero node
+-	 * (initial) and an arc from the start node to the root node.
+-	 */
+-	public final int arcsCount;
+-
+-	/**
+-	 * Total number of arcs, counting arcs that physically overlap due to
+-	 * merging. 
+-	 */
+-	public final int arcsCountTotal;
+-
+-	/**
+-	 * Number of final states (number of input sequences stored in the automaton).
+-	 */
+-	public final int finalStatesCount;
+-
+-	/**
+-	 * Arcs size (in serialized form).
+-	 */
+-	public final int size;
++  /**
++   * Computes the exact number of states and nodes by recursively traversing the FSA.
++   */
++  private static class NodeVisitor {
++    final BitSet visitedArcs = new BitSet();
++    final BitSet visitedNodes = new BitSet();
++
++    int nodes;
++    int arcs;
++    int totalArcs;
++
++    private final FSA fsa;
++
++    NodeVisitor(FSA fsa) {
++      this.fsa = fsa;
++    }
++
++    public void visitNode(final int node) {
++      if (visitedNodes.get(node)) {
++        return;
++      }
++      visitedNodes.set(node);
++
++      nodes++;
++      for (int arc = fsa.getFirstArc(node); arc != 0; arc = fsa.getNextArc(arc)) {
++        if (!visitedArcs.get(arc)) {
++          arcs++;
++        }
++        totalArcs++;
++        visitedArcs.set(arc);
++
++        if (!fsa.isArcTerminal(arc)) {
++          visitNode(fsa.getEndNode(arc));
++        }
++      }
++    }
++  }
++
++  /**
++   * Computes the exact number of final states.
++   */
++  private static class FinalStateVisitor {
++    final IntIntHashMap visitedNodes = new IntIntHashMap();
++
++    private final FSA fsa;
++
++    FinalStateVisitor(FSA fsa) {
++      this.fsa = fsa;
++    }
++
++    public int visitNode(int node) {
++      int index = visitedNodes.indexOf(node);
++      if (index >= 0) {
++        return visitedNodes.indexGet(index);
++      }
++
++      int fromHere = 0;
++      for (int arc = fsa.getFirstArc(node); arc != 0; arc = fsa.getNextArc(arc)) {
++        if (fsa.isArcFinal(arc))
++          fromHere++;
++
++        if (!fsa.isArcTerminal(arc)) {
++          fromHere += visitNode(fsa.getEndNode(arc));
++        }
++      }
++      visitedNodes.put(node, fromHere);
++      return fromHere;
++    }
++  }
++
++  /**
++   * Number of nodes in the automaton.
++   */
++  public final int nodeCount;
++
++  /**
++   * Number of arcs in the automaton, excluding an arcs from the zero node (initial) and an arc from the start node to
++   * the root node.
++   */
++  public final int arcsCount;
++
++  /**
++   * Total number of arcs, counting arcs that physically overlap due to merging.
++   */
++  public final int arcsCountTotal;
++
++  /**
++   * Number of final states (number of input sequences stored in the automaton).
++   */
++  public final int finalStatesCount;
++
++  /**
++   * Arcs size (in serialized form).
++   */
++  public final int size;
+ 
+-	/*
++  /*
+ 	 * 
+ 	 */
+-	public FSAInfo(FSA fsa) {
+-		final NodeVisitor w = new NodeVisitor(fsa);
+-		int root = fsa.getRootNode();
+-		if (root > 0) {
+-			w.visitNode(root);
+-		}
+-
+-		this.nodeCount = 1 + w.nodes;
+-		this.arcsCount = 1 + w.arcs;
+-		this.arcsCountTotal = 1 + w.totalArcs;
+-
+-		final FinalStateVisitor fsv = new FinalStateVisitor(fsa);
+-		this.finalStatesCount = fsv.visitNode(fsa.getRootNode());
+-		
+-		if (fsa instanceof FSA5) {
+-			this.size = ((FSA5) fsa).arcs.length;
+-		} else {
+-			this.size = 0;
+-		}
+-	}
++  public FSAInfo(FSA fsa) {
++    final NodeVisitor w = new NodeVisitor(fsa);
++    int root = fsa.getRootNode();
++    if (root > 0) {
++      w.visitNode(root);
++    }
++
++    this.nodeCount = 1 + w.nodes;
++    this.arcsCount = 1 + w.arcs;
++    this.arcsCountTotal = 1 + w.totalArcs;
++
++    final FinalStateVisitor fsv = new FinalStateVisitor(fsa);
++    this.finalStatesCount = fsv.visitNode(fsa.getRootNode());
++
++    if (fsa instanceof FSA5) {
++      this.size = ((FSA5) fsa).arcs.length;
++    } else {
++      this.size = 0;
++    }
++  }
+ 
+-	/*
++  /*
+ 	 * 
+ 	 */
+-	public FSAInfo(int nodeCount, int arcsCount, int arcsCountTotal, int finalStatesCount) {
+-		this.nodeCount = nodeCount;
+-		this.arcsCount = arcsCount;
+-		this.arcsCountTotal = arcsCountTotal;
+-		this.finalStatesCount = finalStatesCount;
+-		this.size = 0;
+-	}
++  public FSAInfo(int nodeCount, int arcsCount, int arcsCountTotal, int finalStatesCount) {
++    this.nodeCount = nodeCount;
++    this.arcsCount = arcsCount;
++    this.arcsCountTotal = arcsCountTotal;
++    this.finalStatesCount = finalStatesCount;
++    this.size = 0;
++  }
+ 
+-	/*
++  /*
+ 	 * 
+ 	 */
+-	@Override
+-	public String toString() {
+-	    return "Nodes: " + nodeCount 
+-	    	+ ", arcs visited: " + arcsCount 
+-	    	+ ", arcs total: " + arcsCountTotal 
+-	    	+ ", final states: " + finalStatesCount
+-	    	+ ", size: " + size;
+-	}
++  @Override
++  public String toString() {
++    return "Nodes: " + nodeCount + ", arcs visited: " + arcsCount + ", arcs total: " + arcsCountTotal
++        + ", final states: " + finalStatesCount + ", size: " + size;
++  }
+ }
+--- a/morfologik-fsa/src/main/java/morfologik/fsa/FSAUtils.java
++++ b/morfologik-fsa/src/main/java/morfologik/fsa/FSAUtils.java
+@@ -8,7 +8,7 @@
+ import java.util.BitSet;
+ import java.util.TreeMap;
+ 
+-import com.carrotsearch.hppc.IntIntOpenHashMap;
++import com.carrotsearch.hppc.IntIntHashMap;
+ 
+ /**
+  * Other FSA-related utilities not directly associated with the class hierarchy.
+@@ -180,8 +180,8 @@
+     /**
+      * Calculate the size of right language for each state in an FSA.
+      */
+-    public static IntIntOpenHashMap rightLanguageForAllStates(final FSA fsa) {
+-        final IntIntOpenHashMap numbers = new IntIntOpenHashMap();
++    public static IntIntHashMap rightLanguageForAllStates(final FSA fsa) {
++        final IntIntHashMap numbers = new IntIntHashMap();
+ 
+         fsa.visitInPostOrder(new StateVisitor() {
+             public boolean accept(int state) {
+--- a/morfologik-tools/src/main/java/morfologik/tools/FSABuildTool.java
++++ b/morfologik-tools/src/main/java/morfologik/tools/FSABuildTool.java
+@@ -33,7 +33,7 @@
+ import org.apache.commons.cli.ParseException;
+ import org.apache.commons.lang.StringEscapeUtils;
+ 
+-import com.carrotsearch.hppc.IntIntOpenHashMap;
++import com.carrotsearch.hppc.IntIntHashMap;
+ import com.carrotsearch.hppc.cursors.IntIntCursor;
+ 
+ /**
+@@ -176,7 +176,7 @@
+                 TreeMap<Integer, Integer> fanout = FSAUtils.calculateFanOuts(fsa, fsa.getRootNode());
+                 logger.endPart();
+ 
+-                final IntIntOpenHashMap numbers = new IntIntOpenHashMap();
++                final IntIntHashMap numbers = new IntIntHashMap();
+                 fsa.visitInPostOrder(new StateVisitor() {
+                     public boolean accept(int state) {
+                         int thisNodeNumber = 0;
+@@ -538,4 +538,4 @@
+ 		final FSABuildTool tool = new FSABuildTool();
+ 		tool.go(args);
+ 	}
+-}
+\ No newline at end of file
++}
+--- a/morfologik-tools/src/test/java/morfologik/tools/SequenceEncodersRandomizedTest.java
++++ b/morfologik-tools/src/test/java/morfologik/tools/SequenceEncodersRandomizedTest.java
+@@ -62,8 +62,8 @@
+     {
+         ByteArrayList src = ByteArrayList.from(srcString.getBytes(UTF8));
+         ByteArrayList dst = ByteArrayList.from(dstString.getBytes(UTF8));
+-        ByteArrayList encoded = ByteArrayList.newInstance();
+-        ByteArrayList decoded = ByteArrayList.newInstance();
++        ByteArrayList encoded = new ByteArrayList();
++        ByteArrayList decoded = new ByteArrayList();
+ 
+         coder.encode(src, dst, encoded);
+         coder.decode(src, encoded, decoded);
+@@ -88,7 +88,7 @@
+             encoded.size(), 
+             ByteBuffer.wrap(src.toArray()), builder.build());
+         
+-        ByteArrayList decoded2 = ByteArrayList.newInstance();
++        ByteArrayList decoded2 = new ByteArrayList();
+         bb.flip();
+         while (bb.hasRemaining()) decoded2.add(bb.get());
+ 

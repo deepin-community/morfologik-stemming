@@ -1,0 +1,23 @@
+From: Hilko Bengen <bengen@debian.org>
+Date: Mon, 27 Jan 2014 23:44:36 +0100
+Subject: Remove Maven 3 prerequisite
+
+---
+ pom.xml | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/pom.xml b/pom.xml
+index 301d6ba..cb6d1e2 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -5,10 +5,6 @@
+ 
+   <modelVersion>4.0.0</modelVersion>
+ 
+-  <prerequisites>
+-    <maven>3.0.2</maven>
+-  </prerequisites>
+-
+   <!-- We use SonaType for publishing artefacts. Parent POM makes things easier here. -->
+   <parent>
+     <groupId>org.sonatype.oss</groupId>
